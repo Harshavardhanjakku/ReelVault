@@ -16,7 +16,7 @@ This project is built using **HTML, CSS, JavaScript, and Firebase Firestore**.
 - JavaScript (Vanilla JS)
 - Firebase (Firestore Database)
 
-**Demo**
+**Referrence of that app as a screenshot**
 ---<img width="1099" height="870" alt="referrence of that app" src="https://github.com/user-attachments/assets/e2821d76-8afa-4f77-a716-ef6f2f5f167b" />
 
 
