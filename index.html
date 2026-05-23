@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>ReelVault — Save & Organize Reels</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet"/>
+
+<!-- Firebase SDKs (compat = global window.firebase, no module scoping issues) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore-compat.js"></script>
+
+<style>
+/* ════════════════════════════════════════════════
+   TOKENS & RESET
+════════════════════════════════════════════════ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f4f4ef;
+  --surface:#ffffff;
+  --surface2:#f0efe9;
+  --surface3:#e8e7e1;
+  --border:rgba(0,0,0,0.08);
+  --border2:rgba(0,0,0,0.14);
+  --text:#181816;
+  --text2:#6b6a65;
+  --text3:#a0a09a;
+  --accent:#0095f6;
+  --accent-h:#007cd1;
+  --accent-glow:rgba(0,149,246,0.18);
+  --red:#ff3b30;
+  --green:#34c759;
+  --amber:#ff9500;
+  --purple:#af52de;
+  --r:14px;--rs:10px;--rxs:8px;
+  --sh:0 1px 3px rgba(0,0,0,0.06),0 4px 16px rgba(0,0,0,0.07);
+  --sh2:0 4px 24px rgba(0,0,0,0.13);
+  --tr:0.22s cubic-bezier(.4,0,.2,1);
+  --font:'DM Sans',system-ui,sans-serif;
+  --serif:'DM Serif Display',Georgia,serif;
+}
+[data-theme=dark]{
+  --bg:#0f0f0f;
+  --surface:#1c1c1e;
+  --surface2:#2c2c2e;
+  --surface3:#3a3a3c;
+  --border:rgba(255,255,255,0.08);
+  --border2:rgba(255,255,255,0.14);
+  --text:#f5f5f7;
+  --text2:#aeaeb2;
+  --text3:#636366;
+  --sh:0 1px 3px rgba(0,0,0,0.3),0 4px 16px rgba(0,0,0,0.4);
+  --sh2:0 4px 24px rgba(0,0,0,0.6);
+}
+html{scroll-behavior:smooth}
+body{
+  font-family:var(--font);background:var(--bg);color:var(--text);
+  min-height:100vh;transition:background var(--tr),color var(--tr);
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ════════════════════════════════════════════════
+   TOPBAR
+════════════════════════════════════════════════ */
+.topbar{
+  position:sticky;top:0;z-index:300;
+  border-bottom:1px solid var(--border);
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  background:rgba(255,255,255,0.82);
+  transition:background var(--tr);
+}
+[data-theme=dark] .topbar{background:rgba(28,28,30,0.85)}
+.topbar-inner{
+  max-width:700px;margin:0 auto;padding:0 16px;
+  height:58px;display:flex;align-items:center;justify-content:space-between;
+}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none}
+.brand-icon{
+  width:36px;height:36px;border-radius:10px;flex-shrink:0;
+  background:linear-gradient(135deg,#0095f6,#833ab4);
+  display:flex;align-items:center;justify-content:center;font-size:17px;
+}
+.brand-name{font-family:var(--serif);font-size:20px;color:var(--text);letter-spacing:-.2px}
+.brand-name em{font-style:normal;color:var(--accent)}
+.topbar-right{display:flex;align-items:center;gap:8px}
+.icon-btn{
+  width:38px;height:38px;border-radius:var(--rxs);
+  border:1px solid var(--border);background:var(--surface2);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:15px;color:var(--text2);transition:all var(--tr);
+  position:relative;
+}
+.icon-btn:hover{border-color:var(--border2);background:var(--surface3);color:var(--text)}
+
+/* Dark-mode toggle */
+.dm-track{
+  width:50px;height:28px;border-radius:14px;
+  border:1px solid var(--border);background:var(--surface2);
+  cursor:pointer;position:relative;transition:background var(--tr);
+  flex-shrink:0;
+}
+[data-theme=dark] .dm-track{background:#2c2c2e}
+.dm-thumb{
+  position:absolute;top:3px;left:3px;
+  width:22px;height:22px;border-radius:50%;background:#fff;
+  box-shadow:0 1px 4px rgba(0,0,0,0.25);
+  transition:transform var(--tr);display:flex;align-items:center;justify-content:center;font-size:12px;
+  pointer-events:none;
+}
+[data-theme=dark] .dm-thumb{transform:translateX(22px)}
+
+/* ════════════════════════════════════════════════
+   MAIN
+════════════════════════════════════════════════ */
+.main{max-width:700px;margin:0 auto;padding:20px 16px 110px}
+
+/* ════════════════════════════════════════════════
+   STATS ROW
+════════════════════════════════════════════════ */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
+.sc{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  padding:14px 10px;text-align:center;box-shadow:var(--sh);
+  transition:transform var(--tr),box-shadow var(--tr);cursor:default;
+}
+.sc:hover{transform:translateY(-2px);box-shadow:var(--sh2)}
+.sc-n{font-size:24px;font-weight:600;line-height:1;color:var(--text)}
+.sc-l{font-size:10px;color:var(--text3);margin-top:5px;font-weight:500;text-transform:uppercase;letter-spacing:.5px}
+.sc.c-accent .sc-n{color:var(--accent)}
+.sc.c-green  .sc-n{color:var(--green)}
+.sc.c-purple .sc-n{color:var(--purple)}
+.sc.c-amber  .sc-n{color:var(--amber)}
+
+/* ════════════════════════════════════════════════
+   CONTROLS
+════════════════════════════════════════════════ */
+.controls{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  padding:14px;margin-bottom:14px;box-shadow:var(--sh);
+}
+.search-wrap{position:relative;margin-bottom:12px}
+.search-ico{
+  position:absolute;left:12px;top:50%;transform:translateY(-50%);
+  font-size:15px;color:var(--text3);pointer-events:none;
+}
+input,select,textarea{
+  font-family:var(--font);font-size:14px;color:var(--text);
+  background:var(--surface2);border:1px solid var(--border);border-radius:var(--rs);
+  outline:none;transition:border-color var(--tr),box-shadow var(--tr);
+  -webkit-appearance:none;appearance:none;
+}
+input::placeholder,textarea::placeholder{color:var(--text3)}
+input:focus,select:focus,textarea:focus{
+  border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow);
+}
+#searchInput{width:100%;padding:10px 12px 10px 38px}
+.chips{display:flex;gap:7px;overflow-x:auto;scrollbar-width:none;padding-bottom:1px}
+.chips::-webkit-scrollbar{display:none}
+.chip{
+  padding:6px 13px;border-radius:20px;font-size:12px;font-weight:500;
+  border:1px solid var(--border);background:var(--surface2);
+  color:var(--text2);cursor:pointer;white-space:nowrap;
+  transition:all var(--tr);flex-shrink:0;
+}
+.chip:hover,.chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* ════════════════════════════════════════════════
+   SORT ROW
+════════════════════════════════════════════════ */
+.sort-row{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:14px;
+}
+.res-label{font-size:13px;color:var(--text3);font-weight:500}
+.sort-sel{
+  padding:6px 28px 6px 10px;border-radius:var(--rxs);font-size:12px;
+  background:var(--surface);border:1px solid var(--border);color:var(--text2);
+  cursor:pointer;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 8px center;
+}
+
+/* ════════════════════════════════════════════════
+   CARD LIST
+════════════════════════════════════════════════ */
+#list{display:flex;flex-direction:column;gap:12px}
+.card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  overflow:hidden;box-shadow:var(--sh);
+  animation:cardIn .3s cubic-bezier(.34,1.4,.64,1) both;
+  transition:transform var(--tr),box-shadow var(--tr),border-color var(--tr);
+}
+.card:hover{transform:translateY(-2px);box-shadow:var(--sh2);border-color:var(--border2)}
+@keyframes cardIn{from{opacity:0;transform:translateY(18px) scale(.97)}to{opacity:1;transform:none}}
+
+/* thumb */
+.thumb{
+  width:100%;height:152px;background:var(--surface2);
+  border-bottom:1px solid var(--border);overflow:hidden;display:flex;
+  align-items:center;justify-content:center;flex-direction:column;gap:7px;position:relative;
+}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb-fb{pointer-events:none;text-align:center}
+.thumb-fb .ti{font-size:38px;display:block;margin-bottom:6px}
+.thumb-fb p{font-size:11px;color:var(--text3)}
+.thumb-domain{
+  position:absolute;bottom:8px;left:10px;
+  background:rgba(0,0,0,0.55);color:#fff;font-size:10px;padding:2px 7px;
+  border-radius:20px;backdrop-filter:blur(4px);
+}
+
+/* body */
+.card-body{padding:14px}
+.card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px}
+.card-title{font-size:14px;font-weight:500;color:var(--text);word-break:break-all;line-height:1.45;flex:1}
+.card-title a{color:var(--accent);text-decoration:none}
+.card-title a:hover{text-decoration:underline}
+.cat-badge{
+  flex-shrink:0;padding:3px 9px;border-radius:20px;
+  font-size:10px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;
+}
+.note{font-size:12px;color:var(--text2);line-height:1.55;margin-bottom:9px;font-style:italic}
+.date{font-size:11px;color:var(--text3);margin-bottom:12px;display:flex;align-items:center;gap:4px}
+
+/* actions */
+.actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.cbtn{
+  padding:9px 6px;border-radius:var(--rs);border:none;
+  font-size:12px;font-weight:500;font-family:var(--font);
+  cursor:pointer;transition:all var(--tr);
+  display:flex;align-items:center;justify-content:center;gap:5px;
+}
+.cbtn-open{background:var(--accent);color:#fff}
+.cbtn-open:hover{background:var(--accent-h)}
+.cbtn-copy{background:var(--surface2);color:var(--text2);border:1px solid var(--border)}
+.cbtn-copy:hover{background:var(--surface3);color:var(--text)}
+.cbtn-copy.done{background:var(--green)!important;color:#fff!important;border-color:var(--green)!important}
+.cbtn-del{background:rgba(255,59,48,.1);color:var(--red);border:1px solid rgba(255,59,48,.2)}
+.cbtn-del:hover{background:var(--red);color:#fff;border-color:var(--red)}
+
+/* ════════════════════════════════════════════════
+   EMPTY / LOADING
+════════════════════════════════════════════════ */
+.empty{
+  text-align:center;padding:60px 20px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r);box-shadow:var(--sh);
+}
+.empty-ico{font-size:54px;display:block;margin-bottom:14px}
+.empty-title{font-family:var(--serif);font-size:22px;margin-bottom:8px}
+.empty-sub{font-size:14px;color:var(--text3)}
+.spinner-wrap{padding:52px;text-align:center}
+.spinner{
+  width:38px;height:38px;border:3px solid var(--border);
+  border-top-color:var(--accent);border-radius:50%;
+  animation:spin .65s linear infinite;margin:0 auto 14px;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ════════════════════════════════════════════════
+   MODAL
+════════════════════════════════════════════════ */
+.overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.5);
+  z-index:500;display:flex;align-items:flex-end;justify-content:center;
+  padding:0 0 0;opacity:0;pointer-events:none;
+  transition:opacity .22s ease;backdrop-filter:blur(5px);
+}
+.overlay.open{opacity:1;pointer-events:all}
+.modal{
+  background:var(--surface);
+  border-radius:var(--r) var(--r) 0 0;
+  width:100%;max-width:480px;
+  padding:24px 20px 32px;
+  transform:translateY(50px);
+  transition:transform .3s cubic-bezier(.34,1.2,.64,1);
+  max-height:92vh;overflow-y:auto;
+}
+.overlay.open .modal{transform:translateY(0)}
+.modal-handle{
+  width:40px;height:4px;border-radius:2px;background:var(--surface3);
+  margin:0 auto 20px;
+}
+.modal-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.modal-title{font-family:var(--serif);font-size:21px}
+.modal-x{
+  width:30px;height:30px;border-radius:50%;border:none;
+  background:var(--surface2);cursor:pointer;font-size:15px;
+  color:var(--text2);display:flex;align-items:center;justify-content:center;
+  transition:all var(--tr);
+}
+.modal-x:hover{background:var(--surface3);color:var(--text)}
+
+.fg{margin-bottom:14px}
+.fg label{
+  display:block;font-size:11px;font-weight:600;
+  color:var(--text3);margin-bottom:6px;letter-spacing:.5px;text-transform:uppercase;
+}
+.fg input,.fg select,.fg textarea{width:100%;padding:11px 13px}
+.fg textarea{resize:vertical;min-height:76px}
+.fg select option{background:var(--surface);color:var(--text)}
+
+.dupe-warn{
+  background:rgba(255,149,0,.12);border:1px solid rgba(255,149,0,.3);
+  border-radius:var(--rs);padding:10px 13px;margin-bottom:14px;
+  font-size:13px;color:var(--amber);
+  align-items:center;gap:7px;display:none;
+}
+.dupe-warn.show{display:flex}
+
+.btn-save{
+  width:100%;padding:14px;border-radius:var(--rs);border:none;
+  background:var(--accent);color:#fff;font-size:15px;font-weight:600;
+  font-family:var(--font);cursor:pointer;margin-top:6px;
+  transition:all var(--tr);
+}
+.btn-save:hover:not(:disabled){background:var(--accent-h);transform:translateY(-1px);box-shadow:0 4px 16px var(--accent-glow)}
+.btn-save:disabled{opacity:.5;cursor:not-allowed;transform:none}
+
+/* ════════════════════════════════════════════════
+   FAB
+════════════════════════════════════════════════ */
+.fab{
+  position:fixed;bottom:28px;right:22px;z-index:400;
+  width:58px;height:58px;border-radius:50%;border:none;
+  background:linear-gradient(135deg,#0095f6,#833ab4);
+  color:#fff;font-size:28px;cursor:pointer;
+  box-shadow:0 6px 22px rgba(0,149,246,.45);
+  display:flex;align-items:center;justify-content:center;
+  transition:transform var(--tr),box-shadow var(--tr);
+  line-height:1;
+}
+.fab:hover{transform:scale(1.1) translateY(-2px);box-shadow:0 10px 30px rgba(0,149,246,.55)}
+.fab:active{transform:scale(.96)}
+
+/* ════════════════════════════════════════════════
+   EXPORT DROPDOWN
+════════════════════════════════════════════════ */
+.exp-wrap{position:relative}
+.exp-menu{
+  position:absolute;top:44px;right:0;z-index:600;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--rs);box-shadow:var(--sh2);padding:6px;min-width:160px;
+  opacity:0;transform:translateY(-6px) scale(.97);pointer-events:none;
+  transition:all .18s ease;
+}
+.exp-menu.open{opacity:1;transform:none;pointer-events:all}
+.exp-item{
+  padding:9px 12px;border-radius:var(--rxs);font-size:13px;
+  color:var(--text2);cursor:pointer;display:flex;align-items:center;gap:9px;
+  transition:all var(--tr);
+}
+.exp-item:hover{background:var(--surface2);color:var(--text)}
+
+/* ════════════════════════════════════════════════
+   TOAST
+════════════════════════════════════════════════ */
+#toast{
+  position:fixed;bottom:32px;left:50%;z-index:9999;
+  transform:translateX(-50%) translateY(70px);
+  background:var(--text);color:var(--bg);
+  padding:11px 22px;border-radius:24px;
+  font-size:13px;font-weight:500;
+  white-space:nowrap;opacity:0;
+  transition:transform .28s cubic-bezier(.34,1.3,.64,1),opacity .28s;
+  pointer-events:none;
+}
+#toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+
+/* ════════════════════════════════════════════════
+   CATEGORY BADGE COLORS
+════════════════════════════════════════════════ */
+.cat-travel  {background:rgba(52,199,89,.14); color:#1a7a36}
+.cat-food    {background:rgba(255,149,0,.14); color:#a85500}
+.cat-fashion {background:rgba(255,45,85,.14); color:#b8103b}
+.cat-tech    {background:rgba(0,149,246,.14); color:#005ea8}
+.cat-fitness {background:rgba(175,82,222,.14);color:#6c1fa3}
+.cat-music   {background:rgba(255,59,48,.14); color:#b01c12}
+.cat-comedy  {background:rgba(255,204,0,.14); color:#7a5c00}
+.cat-other   {background:rgba(120,120,130,.14);color:#4a4a52}
+[data-theme=dark] .cat-travel  {color:#4ade80}
+[data-theme=dark] .cat-food    {color:#fb923c}
+[data-theme=dark] .cat-fashion {color:#fb7185}
+[data-theme=dark] .cat-tech    {color:#38bdf8}
+[data-theme=dark] .cat-fitness {color:#c084fc}
+[data-theme=dark] .cat-music   {color:#f87171}
+[data-theme=dark] .cat-comedy  {color:#fde047}
+[data-theme=dark] .cat-other   {color:#94a3b8}
+
+/* ════════════════════════════════════════════════
+   RESPONSIVE
+════════════════════════════════════════════════ */
+@media(max-width:480px){
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .actions{grid-template-columns:1fr 1fr}
+  .cbtn-del{grid-column:1/-1}
+  .topbar-inner{height:52px}
+  .fab{bottom:22px;right:16px}
+}
+</style>
+</head>
+<body>
+
+<!-- ══ TOPBAR ════════════════════════════════════ -->
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="#">
+      <div class="brand-icon">🎬</div>
+      <span class="brand-name">Reel<em>Vault</em></span>
+    </a>
+    <div class="topbar-right">
+      <!-- Export -->
+      <div class="exp-wrap">
+        <button class="icon-btn" id="expBtn" title="Export" onclick="toggleExport()">📤</button>
+        <div class="exp-menu" id="expMenu">
+          <div class="exp-item" onclick="exportAs('txt')">📄 Export as TXT</div>
+          <div class="exp-item" onclick="exportAs('csv')">📊 Export as CSV</div>
+        </div>
+      </div>
+      <!-- Dark mode -->
+      <div class="dm-track" onclick="toggleTheme()" title="Toggle dark mode" role="button" aria-label="Toggle dark mode">
+        <div class="dm-thumb" id="dmThumb">🌙</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ══ MAIN ══════════════════════════════════════ -->
+<main class="main">
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="sc c-accent"><div class="sc-n" id="sTotal">—</div><div class="sc-l">Total</div></div>
+    <div class="sc c-green"><div class="sc-n" id="sToday">—</div><div class="sc-l">Today</div></div>
+    <div class="sc c-purple"><div class="sc-n" id="sCats">—</div><div class="sc-l">Categories</div></div>
+    <div class="sc c-amber"><div class="sc-n" id="sLinks">—</div><div class="sc-l">Links</div></div>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <div class="search-wrap">
+      <span class="search-ico">🔍</span>
+      <input type="text" id="searchInput" placeholder="Search by link, note, or category…" oninput="applyFilters()"/>
+    </div>
+    <div class="chips" id="chips">
+      <div class="chip on"  data-cat="all"     onclick="setFilter('all',this)">All</div>
+      <div class="chip"     data-cat="Travel"  onclick="setFilter('Travel',this)">✈️ Travel</div>
+      <div class="chip"     data-cat="Food"    onclick="setFilter('Food',this)">🍜 Food</div>
+      <div class="chip"     data-cat="Fashion" onclick="setFilter('Fashion',this)">👗 Fashion</div>
+      <div class="chip"     data-cat="Tech"    onclick="setFilter('Tech',this)">💻 Tech</div>
+      <div class="chip"     data-cat="Fitness" onclick="setFilter('Fitness',this)">💪 Fitness</div>
+      <div class="chip"     data-cat="Music"   onclick="setFilter('Music',this)">🎵 Music</div>
+      <div class="chip"     data-cat="Comedy"  onclick="setFilter('Comedy',this)">😂 Comedy</div>
+      <div class="chip"     data-cat="Other"   onclick="setFilter('Other',this)">📌 Other</div>
+    </div>
+  </div>
+
+  <!-- Sort row -->
+  <div class="sort-row">
+    <span class="res-label" id="resLabel">Loading…</span>
+    <select class="sort-sel" id="sortSel" onchange="applyFilters()">
+      <option value="newest">Newest first</option>
+      <option value="oldest">Oldest first</option>
+      <option value="alpha">A → Z</option>
+    </select>
+  </div>
+
+  <!-- Cards -->
+  <div id="list">
+    <div class="spinner-wrap">
+      <div class="spinner"></div>
+      <p style="color:var(--text3);font-size:13px">Loading your vault…</p>
+    </div>
+  </div>
+
+</main>
+
+<!-- ══ FAB ═══════════════════════════════════════ -->
+<button class="fab" onclick="openModal()" title="Add reel  (Ctrl+K)" aria-label="Add reel">＋</button>
+
+<!-- ══ ADD MODAL ══════════════════════════════════ -->
+<div class="overlay" id="overlay" onclick="overlayClick(event)">
+  <div class="modal" id="modal" role="dialog" aria-modal="true" aria-label="Save a reel">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr">
+      <div class="modal-title">Save a Reel</div>
+      <button class="modal-x" onclick="closeModal()" aria-label="Close">✕</button>
+    </div>
+
+    <div class="dupe-warn" id="dupeWarn">⚠️ This reel is already in your vault!</div>
+
+    <div class="fg">
+      <label for="iText">Reel Link or Note *</label>
+      <input type="text" id="iText" placeholder="https://www.instagram.com/reel/…" oninput="checkDupe()"/>
+    </div>
+    <div class="fg">
+      <label for="iCat">Category</label>
+      <select id="iCat">
+        <option value="Other">📌 Other</option>
+        <option value="Travel">✈️ Travel</option>
+        <option value="Food">🍜 Food</option>
+        <option value="Fashion">👗 Fashion</option>
+        <option value="Tech">💻 Tech</option>
+        <option value="Fitness">💪 Fitness</option>
+        <option value="Music">🎵 Music</option>
+        <option value="Comedy">😂 Comedy</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label for="iNote">Note (optional)</label>
+      <textarea id="iNote" placeholder="Why did you save this?…"></textarea>
+    </div>
+    <button class="btn-save" id="btnSave" onclick="saveReel()">Save to Vault</button>
+  </div>
+</div>
+
+<!-- ══ TOAST ══════════════════════════════════════ -->
+<div id="toast" role="status" aria-live="polite"></div>
+
+<!-- ══════════════════════════════════════════════
+     ALL JS — plain <script>, NO module scoping
+══════════════════════════════════════════════ -->
+<script>
+/* ── Firebase init (compat SDK) ───────────────── */
+const firebaseConfig = {
+  apiKey:            "AIzaSyBMpt2Oq3aP0TLfkyHNSM1e9xBYThPADUQ",
+  authDomain:        "reel-search-app.firebaseapp.com",
+  projectId:         "reel-search-app",
+  storageBucket:     "reel-search-app.firebasestorage.app",
+  messagingSenderId: "897633367760",
+  appId:             "1:897633367760:web:52bda61cc58df3ec54d0d5"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const COL = "reels";
+
+/* ── App state ────────────────────────────────── */
+let allData      = [];
+let activeFilter = "all";
+const LS_CACHE   = "rv_cache_v2";
+const LS_THEME   = "rv_theme";
+
+/* ════════════════════════════════════════════════
+   THEME
+════════════════════════════════════════════════ */
+(function initTheme(){
+  const saved = localStorage.getItem(LS_THEME) || "light";
+  document.documentElement.setAttribute("data-theme", saved);
+  document.getElementById("dmThumb").textContent = saved === "dark" ? "☀️" : "🌙";
+})();
+
+function toggleTheme(){
+  const cur  = document.documentElement.getAttribute("data-theme");
+  const next = cur === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  localStorage.setItem(LS_THEME, next);
+  document.getElementById("dmThumb").textContent = next === "dark" ? "☀️" : "🌙";
+}
+
+/* ════════════════════════════════════════════════
+   MODAL
+════════════════════════════════════════════════ */
+function openModal(){
+  document.getElementById("overlay").classList.add("open");
+  setTimeout(() => document.getElementById("iText").focus(), 300);
+}
+function closeModal(){
+  document.getElementById("overlay").classList.remove("open");
+  hideDupe();
+  document.getElementById("iText").value     = "";
+  document.getElementById("iNote").value     = "";
+  document.getElementById("iCat").value      = "Other";
+  document.getElementById("btnSave").disabled = false;
+}
+function overlayClick(e){
+  if(e.target === document.getElementById("overlay")) closeModal();
+}
+
+/* ════════════════════════════════════════════════
+   SAVE
+════════════════════════════════════════════════ */
+async function saveReel(){
+  const text = document.getElementById("iText").value.trim();
+  if(!text){ showToast("⚠️ Please enter a link or note"); return; }
+  if(isDupe(text)){ showToast("Already saved!"); return; }
+
+  const cat  = document.getElementById("iCat").value;
+  const note = document.getElementById("iNote").value.trim();
+  const btn  = document.getElementById("btnSave");
+
+  btn.disabled    = true;
+  btn.textContent = "Saving…";
+
+  try{
+    const docRef = await db.collection(COL).add({
+      text,
+      category: cat,
+      note,
+      created: Date.now()
+    });
+    // optimistic push
+    allData.unshift({ id: docRef.id, text, category: cat, note, created: Date.now() });
+    persistCache();
+    updateStats();
+    applyFilters();
+    closeModal();
+    showToast("✅ Reel saved!");
+  } catch(err){
+    console.error(err);
+    showToast("❌ Error saving. Check connection.");
+  }
+  btn.disabled    = false;
+  btn.textContent = "Save to Vault";
+}
+
+/* ════════════════════════════════════════════════
+   DELETE
+════════════════════════════════════════════════ */
+async function removeItem(id){
+  try{
+    await db.collection(COL).doc(id).delete();
+    allData = allData.filter(d => d.id !== id);
+    persistCache();
+    updateStats();
+    applyFilters();
+    showToast("🗑 Removed");
+  } catch(err){
+    console.error(err);
+    showToast("❌ Error deleting.");
+  }
+}
+
+/* ════════════════════════════════════════════════
+   COPY
+════════════════════════════════════════════════ */
+function copyLink(text, btn){
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(() => flashCopy(btn)).catch(() => fallbackCopy(text, btn));
+  } else {
+    fallbackCopy(text, btn);
+  }
+}
+function fallbackCopy(text, btn){
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  try{ document.execCommand("copy"); flashCopy(btn); } catch(e){ showToast("Copy failed"); }
+  document.body.removeChild(ta);
+}
+function flashCopy(btn){
+  btn.textContent = "✅ Copied";
+  btn.classList.add("done");
+  showToast("📋 Link copied!");
+  setTimeout(() => { btn.textContent = "📋 Copy"; btn.classList.remove("done"); }, 1800);
+}
+
+/* ════════════════════════════════════════════════
+   LOAD DATA
+════════════════════════════════════════════════ */
+async function loadData(){
+  // Show cache instantly
+  const cached = localStorage.getItem(LS_CACHE);
+  if(cached){
+    try{
+      allData = JSON.parse(cached);
+      updateStats();
+      applyFilters();
+    } catch(e){ localStorage.removeItem(LS_CACHE); }
+  }
+
+  // Fetch fresh from Firestore
+  try{
+    const snap = await db.collection(COL).orderBy("created","desc").get();
+    allData = [];
+    snap.forEach(d => allData.push({ id: d.id, ...d.data() }));
+    persistCache();
+    updateStats();
+    applyFilters();
+  } catch(err){
+    console.error(err);
+    if(allData.length === 0){
+      document.getElementById("list").innerHTML = `
+        <div class="empty">
+          <span class="empty-ico">⚠️</span>
+          <div class="empty-title">Couldn't connect</div>
+          <div class="empty-sub">Check your internet connection and refresh the page</div>
+        </div>`;
+      document.getElementById("resLabel").textContent = "Offline";
+    }
+  }
+}
+function persistCache(){ localStorage.setItem(LS_CACHE, JSON.stringify(allData)); }
+
+/* ════════════════════════════════════════════════
+   FILTERS & SORT
+════════════════════════════════════════════════ */
+function setFilter(cat, el){
+  activeFilter = cat;
+  document.querySelectorAll(".chip").forEach(c => c.classList.remove("on"));
+  el.classList.add("on");
+  applyFilters();
+}
+function applyFilters(){
+  const q   = (document.getElementById("searchInput").value || "").toLowerCase().trim();
+  const sel = document.getElementById("sortSel").value;
+
+  let arr = allData.filter(d => {
+    const matchCat = activeFilter === "all" || d.category === activeFilter;
+    const matchQ   = !q
+      || (d.text||"").toLowerCase().includes(q)
+      || (d.note||"").toLowerCase().includes(q)
+      || (d.category||"").toLowerCase().includes(q);
+    return matchCat && matchQ;
+  });
+
+  if(sel === "oldest") arr.sort((a,b) => a.created - b.created);
+  else if(sel === "alpha") arr.sort((a,b) => (a.text||"").localeCompare(b.text||""));
+  // newest = default (already sorted from Firestore + optimistic push)
+
+  renderList(arr);
+  document.getElementById("resLabel").textContent =
+    `${arr.length} reel${arr.length !== 1 ? "s" : ""}`;
+}
+
+/* ════════════════════════════════════════════════
+   RENDER
+════════════════════════════════════════════════ */
+function renderList(arr){
+  const list = document.getElementById("list");
+  if(arr.length === 0){
+    list.innerHTML = `
+      <div class="empty">
+        <span class="empty-ico">🎬</span>
+        <div class="empty-title">Nothing here yet</div>
+        <div class="empty-sub">Tap <strong>＋</strong> to save your first reel</div>
+      </div>`;
+    return;
+  }
+
+  const frag = document.createDocumentFragment();
+  arr.forEach((item, i) => {
+    const card  = document.createElement("div");
+    card.className = "card";
+    card.style.animationDelay = `${i * 35}ms`;
+
+    const isLink   = typeof item.text === "string" && item.text.startsWith("http");
+    const catKey   = (item.category || "Other").toLowerCase();
+    const catLabel = item.category || "Other";
+    const catEmoji = {travel:"✈️",food:"🍜",fashion:"👗",tech:"💻",fitness:"💪",music:"🎵",comedy:"😂",other:"📌"}[catKey] || "📌";
+    const dateStr  = item.created ? fmtDate(item.created) : "";
+    const domain   = isLink ? getDomain(item.text) : "";
+    const safeText = escHtml(item.text || "");
+    const safeNote = escHtml(item.note || "");
+    const safeId   = escHtml(item.id);
+
+    card.innerHTML = `
+      ${isLink ? `
+        <div class="thumb">
+          <div class="thumb-fb">
+            <span class="ti">🎬</span>
+            <p>${escHtml(domain)}</p>
+          </div>
+          ${domain ? `<span class="thumb-domain">${escHtml(domain)}</span>` : ""}
+        </div>` : ""}
+      <div class="card-body">
+        <div class="card-top">
+          <div class="card-title">
+            ${isLink
+              ? `<a href="${safeText}" target="_blank" rel="noopener noreferrer">${escHtml(shortUrl(item.text))}</a>`
+              : safeText}
+          </div>
+          <span class="cat-badge cat-${escHtml(catKey)}">${catEmoji} ${escHtml(catLabel)}</span>
+        </div>
+        ${safeNote ? `<div class="note">"${safeNote}"</div>` : ""}
+        ${dateStr  ? `<div class="date">📅 Saved on: ${escHtml(dateStr)}</div>` : ""}
+        <div class="actions">
+          ${isLink
+            ? `<button class="cbtn cbtn-open" onclick="window.open('${safeText}','_blank','noopener')">🔵 Open</button>`
+            : `<button class="cbtn cbtn-copy" style="opacity:.35" disabled>🔗 No link</button>`}
+          <button class="cbtn cbtn-copy" onclick="copyLink('${safeText}', this)">📋 Copy</button>
+          <button class="cbtn cbtn-del"  onclick="removeItem('${safeId}')">🗑 Remove</button>
+        </div>
+      </div>`;
+
+    frag.appendChild(card);
+  });
+  list.innerHTML = "";
+  list.appendChild(frag);
+}
+
+/* ════════════════════════════════════════════════
+   STATS
+════════════════════════════════════════════════ */
+function updateStats(){
+  const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+  const todayTs    = todayStart.getTime();
+  const todayN     = allData.filter(d => d.created >= todayTs).length;
+  const catsN      = new Set(allData.map(d => d.category).filter(Boolean)).size;
+  const linksN     = allData.filter(d => (d.text||"").startsWith("http")).length;
+  document.getElementById("sTotal").textContent = allData.length;
+  document.getElementById("sToday").textContent = todayN;
+  document.getElementById("sCats").textContent  = catsN;
+  document.getElementById("sLinks").textContent = linksN;
+}
+
+/* ════════════════════════════════════════════════
+   DUPLICATE DETECTION
+════════════════════════════════════════════════ */
+function isDupe(text){
+  return allData.some(d => (d.text||"").trim() === text.trim());
+}
+function checkDupe(){
+  const v = (document.getElementById("iText").value || "").trim();
+  if(v && isDupe(v)){
+    showDupe();
+  } else {
+    hideDupe();
+  }
+}
+function showDupe(){
+  document.getElementById("dupeWarn").classList.add("show");
+  document.getElementById("btnSave").disabled = true;
+}
+function hideDupe(){
+  document.getElementById("dupeWarn").classList.remove("show");
+  document.getElementById("btnSave").disabled = false;
+}
+
+/* ════════════════════════════════════════════════
+   EXPORT
+════════════════════════════════════════════════ */
+function toggleExport(){
+  const m = document.getElementById("expMenu");
+  m.classList.toggle("open");
+}
+function exportAs(type){
+  document.getElementById("expMenu").classList.remove("open");
+  if(allData.length === 0){ showToast("Nothing to export yet"); return; }
+
+  let content, mime, ext;
+  if(type === "txt"){
+    content = allData.map(d =>
+      `[${d.category||"Other"}] ${d.text}\n  Note: ${d.note||"-"}\n  Date: ${fmtDate(d.created)}`
+    ).join("\n\n");
+    mime = "text/plain"; ext = "txt";
+  } else {
+    const rows = [["Link","Category","Note","Date"]];
+    allData.forEach(d => rows.push([
+      `"${(d.text||"").replace(/"/g,'""')}"`,
+      d.category || "Other",
+      `"${(d.note||"").replace(/"/g,'""')}"`,
+      fmtDate(d.created)
+    ]));
+    content = rows.map(r => r.join(",")).join("\n");
+    mime = "text/csv"; ext = "csv";
+  }
+  const blob = new Blob([content], { type: mime });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href = url;
+  a.download = `reelvault-${fmtDateFile()}.${ext}`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast(`📦 Exported as ${ext.toUpperCase()}`);
+}
+
+/* ════════════════════════════════════════════════
+   TOAST
+════════════════════════════════════════════════ */
+let _toastTimer = null;
+function showToast(msg, dur=2700){
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => t.classList.remove("show"), dur);
+}
+
+/* ════════════════════════════════════════════════
+   HELPERS
+════════════════════════════════════════════════ */
+function fmtDate(ts){
+  if(!ts) return "";
+  return new Date(ts).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
+}
+function fmtDateFile(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function getDomain(url){
+  try{ return new URL(url).hostname.replace(/^www\./,""); } catch{ return ""; }
+}
+function shortUrl(url){
+  try{
+    const u = new URL(url);
+    const p = u.pathname.length > 30 ? u.pathname.slice(0,28)+"…" : u.pathname;
+    return u.hostname.replace(/^www\./,"") + p;
+  } catch{ return (url||"").slice(0,55); }
+}
+function escHtml(s){
+  return String(s||"")
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#39;");
+}
+
+/* ════════════════════════════════════════════════
+   KEYBOARD SHORTCUTS
+════════════════════════════════════════════════ */
+document.addEventListener("keydown", e => {
+  if(e.key === "Escape") closeModal();
+  if((e.ctrlKey || e.metaKey) && e.key === "k"){
+    e.preventDefault();
+    openModal();
+  }
+});
+
+/* Close export menu when clicking outside */
+document.addEventListener("click", e => {
+  const wrap = document.getElementById("expMenu");
+  if(!e.target.closest(".exp-wrap")) wrap.classList.remove("open");
+});
+
+/* ════════════════════════════════════════════════
+   BOOT
+════════════════════════════════════════════════ */
+loadData();
+</script>
+</body>
+</html>
