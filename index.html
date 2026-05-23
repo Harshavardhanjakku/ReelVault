@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en" data-theme="light">
 <head>
@@ -935,3 +936,233 @@ loadData();
 </script>
 </body>
 </html>
+=======
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Saved Reels App</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #fafafa;
+      margin: 0;
+      padding: 0;
+    }
+
+    h2 {
+      text-align: center;
+      padding: 15px;
+      background: white;
+      margin: 0;
+      border-bottom: 1px solid #ddd;
+    }
+
+    .container {
+      padding: 15px;
+      max-width: 500px;
+      margin: auto;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px;
+      margin: 6px 0;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      outline: none;
+    }
+
+    button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 5px;
+      background: #0095f6;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #007cd1;
+    }
+
+    #list {
+      margin-top: 15px;
+    }
+
+    .card {
+      background: white;
+      margin: 10px 0;
+      padding: 15px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    .text {
+      font-size: 14px;
+      margin-bottom: 10px;
+      word-break: break-word;
+    }
+
+    .saveBtn {
+      background: #0095f6;
+      color: white;
+      border: none;
+      padding: 10px;
+      margin-top: 8px;
+      border-radius: 8px;
+      cursor: pointer;
+      width: 100%;
+    }
+
+    .saveBtn:hover {
+      background: #007cd1;
+    }
+
+    .deleteBtn {
+      background: #ff3b30;
+      color: white;
+      border: none;
+      padding: 10px;
+      margin-top: 8px;
+      border-radius: 8px;
+      cursor: pointer;
+      width: 100%;
+    }
+
+    .deleteBtn:hover {
+      background: #d10000;
+    }
+  </style>
+</head>
+
+<body>
+
+<h2>📌 Saved Reels</h2>
+
+<div class="container">
+
+  <input id="text" placeholder="Paste reel link or note" />
+  <button onclick="save()">Save</button>
+
+  <input id="search" placeholder="Search saved reels" onkeyup="search()" />
+
+  <div id="list"></div>
+
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  getDocs,
+  deleteDoc,
+  doc
+} from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBMpt2Oq3aP0TLfkyHNSM1e9xBYThPADUQ",
+  authDomain: "reel-search-app.firebaseapp.com",
+  projectId: "reel-search-app",
+  storageBucket: "reel-search-app.firebasestorage.app",
+  messagingSenderId: "897633367760",
+  appId: "1:897633367760:web:52bda61cc58df3ec54d0d5"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+let data = [];
+
+/* SAVE */
+window.save = async function () {
+  let text = document.getElementById("text").value;
+  if (!text) return;
+
+  await addDoc(collection(db, "reels"), {
+    text: text,
+    created: Date.now()
+  });
+
+  document.getElementById("text").value = "";
+  loadData();
+};
+
+/* DELETE (UNSAVE) */
+window.removeItem = async function (id) {
+  await deleteDoc(doc(db, "reels", id));
+  loadData();
+};
+
+/* LOAD DATA */
+async function loadData() {
+  let snapshot = await getDocs(collection(db, "reels"));
+
+  data = [];
+
+  snapshot.forEach(docSnap => {
+    data.push({
+      id: docSnap.id,
+      text: docSnap.data().text
+    });
+  });
+
+  show(data);
+}
+
+/* SHOW UI */
+function show(arr) {
+  let list = document.getElementById("list");
+  list.innerHTML = "";
+
+  if (arr.length === 0) {
+    list.innerHTML = `<p style="text-align:center; color:gray;">No reels saved yet</p>`;
+    return;
+  }
+
+  arr.slice().reverse().forEach(item => {
+    let card = document.createElement("div");
+    card.className = "card";
+
+    let isLink = item.text.startsWith("http");
+
+    card.innerHTML = `
+      <div class="text">📌 ${item.text}</div>
+
+      ${isLink ? `
+        <button class="saveBtn" onclick="window.open('${item.text}', '_blank')">
+          🔵 Open Reel
+        </button>
+      ` : ""}
+
+      <button class="deleteBtn" onclick="removeItem('${item.id}')">
+        🔴 Unsave
+      </button>
+    `;
+
+    list.appendChild(card);
+  });
+}
+
+/* SEARCH */
+window.search = function () {
+  let value = document.getElementById("search").value.toLowerCase();
+
+  let filtered = data.filter(item =>
+    item.text.toLowerCase().includes(value)
+  );
+
+  show(filtered);
+};
+
+loadData();
+</script>
+
+</body>
+</html>
+
